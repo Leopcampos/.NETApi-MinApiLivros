@@ -66,5 +66,19 @@ public static class LivrosEndpoints
                 Description = "Deleta um livro da biblioteca.",
                 Tags = new List<OpenApiTag> { new OpenApiTag { Name = "Livros" } }
             });
+
+        //Atualizar livro
+        endpoints.MapPut("/livros/{id}", async (int id, Livro livro, ILivroService _livroService) =>
+        {
+            if (livro is null)
+                return Results.BadRequest("Dados inválidos");
+
+            if (id != livro.Id)
+                return Results.BadRequest();
+
+            await _livroService.UpdateLivro(livro);
+
+            return Results.Ok(livro);
+        });
     }
 }
