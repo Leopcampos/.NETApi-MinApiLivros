@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using MinApiLivros.Context;
+using MinApiLivros.Endpoints;
 using MinApiLivros.Entities;
 using MinApiLivros.Services;
 
@@ -10,12 +12,22 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddDbContext<AppDbContext>(optons => 
+builder.Services.AddDbContext<AppDbContext>(optons =>
     optons.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddIdentityApiEndpoints<IdentityUser>()
+    .AddEntityFrameworkStores<AppDbContext>();
 
 builder.Services.AddTransient<ILivroService, LivroService>();
 
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
+
+//Configura o meddleware de exceção
+app.UseStatusCodePages(async statusCodeContext
+    => await Results.Problem(statusCode: statusCodeContext.HttpContext.Response.StatusCode)
+    .ExecuteAsync(statusCodeContext.HttpContext));
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -26,65 +38,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-#region Endpoints Livros
-//Criar novo livro
-app.MapPost("/livros", async (Livro livro, ILivroService _livroService) =>
-{
-    await _livroService.AddLivro(livro);
-    return Results.Created($"{livro.Id}", livro);
-})
-    .WithName("AddLivro")
-    .WithOpenApi(x => new OpenApiOperation(x)
-    {
-        Summary = "Incluir um livro",
-        Description = "Inclui um novo livro na biblioteca.",
-        Tags = new List<OpenApiTag> { new OpenApiTag { Name = "Livros" } }
-    });
+//Mapeamento dos endpoins do Identity
+app.MapGroup("/identity").MapIdentityApi<IdentityUser>();
 
-//Buscar Todos os livros
-app.MapGet("/livros", async (ILivroService _livroService) =>
-    TypedResults.Ok(await _livroService.GetLivros()))
-    .WithName("GetLivros")
-    .WithOpenApi(x => new OpenApiOperation(x)
-    {
-        Summary = "Obtém todos os livros da biblioteca",
-        Description = "Retorna informações sobre livros.",
-        Tags = new List<OpenApiTag> { new OpenApiTag { Name = "Livros" } }
-    });
-
-//Buscar livro por Id
-app.MapGet("/livros/{id}", async (ILivroService _livroService, int id) =>
-{
-    var livro = await _livroService.GetLivro(id);
-
-    if (livro != null)
-        return Results.Ok(livro);
-    else
-        return Results.NotFound();
-})
-    .WithName("GetLivroPorId")
-    .WithOpenApi(x => new OpenApiOperation(x)
-    {
-        Summary = "Obtém um livro pelo seu Id",
-        Description = "Retorna a informação de um livro.",
-        Tags = new List<OpenApiTag> { new OpenApiTag { Name = "Livros" } }
-    });
-
-//Deletar livro
-app.MapDelete("/livros/{id}", async (int id, ILivroService _livroService) =>
-{
-    var livro = await _livroService.DeleteLivro(id);
-    return Results.Ok($"Livro de id={id} deletado");
-})
-    .WithName("DeleteLivroPorId")
-    .WithOpenApi(x => new OpenApiOperation(x)
-    {
-        Summary = "Deleta um livro pelo seu Id",
-        Description = "Deleta um livro da biblioteca.",
-        Tags = new List<OpenApiTag> { new OpenApiTag { Name = "Livros" } }
-    });
-
-#endregion
-
+//Registrando os endpoints de Livros
+app.RegisterLivrosEndpoints();
 
 app.Run();
